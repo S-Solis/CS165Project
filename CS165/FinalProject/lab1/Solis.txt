@@ -1,0 +1,14 @@
+Stephanie Solis
+
+A team of researchers have created a proof-of-concept piece of malware that can give attackers control of USB smart card readers attached to an infected Windows computer over the Internet.
+
+The malware installs a special driver on the infected computer which allows for the USB devices connected to it to be shared over the Internet with the attacker's computer.
+malware
+
+In the case of USB smart card readers, the attacker can use the middleware software provided by the smart card manufacturer to perform operations with the victim's card as if it was attached to his own computer, said Paul Rascagneres, an IT security consultant at Luxembourg-based security auditing and consulting firm Itrust Consulting, last week. Rascagneres is also the founder and leader of a malware analysis and engineering project called malware.lu, whose team designed this USB sharing malware.
+
+There are already documented cases of malware that hijacks smart card devices on the local computer and uses them through the API (application programming interface) provided by the manufacturer. 
+
+...
+
+By Lucian Constantin
