@@ -98,11 +98,12 @@ int main(int argc, char** argv)
 	// 2. Receive a random number (the challenge) from the client
 	printf("2. Waiting for client to connect and send challenge...");
     
-    //SSL_read
-    string challenge="";
+	//SSL_read
+	unsigned char buf[16];
+	SSL_read(ssl, buf, sizeof(buf));
     
 	printf("DONE.\n");
-	printf("    (Challenge: \"%s\")\n", challenge.c_str());
+	printf("    (Challenge: \"%s\")\n", buf);
 
     //-------------------------------------------------------------------------
 	// 3. Generate the SHA1 hash of the challenge

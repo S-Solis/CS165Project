@@ -7,6 +7,7 @@
 #include <string>
 #include <time.h>               // to seed random number generator
 #include <sstream>          // stringstreams
+#include <iostream>
 using namespace std;
 
 #include <openssl/ssl.h>	// Secure Socket Layer library
@@ -15,15 +16,18 @@ using namespace std;
 #include <openssl/pem.h>	// For reading .pem files for RSA keys
 #include <openssl/err.h>	// ERR_get_error()
 #include <openssl/dh.h>		// Diffie-Helman algorithms & libraries
+#include <openssl/rand.h>       // Random number generator
 
 #include "utils.h"
+
+
 
 //----------------------------------------------------------------------------
 // Function: main()
 //----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-	//-------------------------------------------------------------------------
+	//---------------------------------------------------------------------
     // Initialization
 
     ERR_load_crypto_strings();
@@ -92,23 +96,36 @@ int main(int argc, char** argv)
 	// 2. Send the server a random number
 	printf("2.  Sending challenge to the server...");
     
-    string randomNumber="31337";
-	//SSL_write
+	unsigned char buf[16];
+	//fix
+	if(!RAND_bytes(buf, sizeof(buf)-2))
+	{
+	  cerr << "Unable to generate random number for step 2." << endl;
+	  exit(1);
+	}
+	/* verify that buf is being transmitted correctly
+	for(int i = 0; i < 15; ++i)
+	  {
+	    buf[i] = 'a';
+	   } */
+
+	buf[sizeof(buf)-1] = NULL;
+	SSL_write(ssl, buf, sizeof(buf));
     
-    printf("SUCCESS.\n");
-	printf("    (Challenge sent: \"%s\")\n", randomNumber.c_str());
+	printf("SUCCESS.\n");
+	printf("    (Challenge sent: \"%s\")\n",buf );
 
     //-------------------------------------------------------------------------
 	// 3a. Receive the signed key from the server
 	printf("3a. Receiving signed key from server...");
 
-    char* buff="FIXME";
-    int len=5;
+	char* buff="FIXME";
+	int len=5;
 	//SSL_read;
 
 	printf("RECEIVED.\n");
-	printf("    (Signature: \"%s\" (%d bytes))\n", buff2hex((const unsigned char*)buff,
-								len).c_str(), len);
+	printf("    (Signature: \"%s\" (%d bytes))\n",
+	       buff2hex((const unsigned char*)buff,len).c_str(), len);
 
     //-------------------------------------------------------------------------
 	// 3b. Authenticate the signed key
