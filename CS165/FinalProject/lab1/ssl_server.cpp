@@ -6,6 +6,7 @@
 //----------------------------------------------------------------------------
 #include <string>
 #include <time.h>
+#include <iostream>
 using namespace std;
 
 #include <openssl/ssl.h>	// Secure Socket Layer library
@@ -15,6 +16,8 @@ using namespace std;
 #include <openssl/err.h>
 
 #include "utils.h"
+
+#define BUFFER_LENGTH 16
 
 //-----------------------------------------------------------------------------
 // Function: main()
@@ -99,31 +102,37 @@ int main(int argc, char** argv)
 	printf("2. Waiting for client to connect and send challenge...");
     
 	//SSL_read
-	unsigned char buf[16];
-	SSL_read(ssl, buf, sizeof(buf));
+	unsigned char challenge[BUFFER_LENGTH];
+	SSL_read(ssl, challenge, sizeof(challenge));
     
+
+	//DECRYPT HERE
+
 	printf("DONE.\n");
-	printf("    (Challenge: \"%s\")\n", buf);
+	printf("    (Challenge: \"%s\")\n", challenge);
 
     //-------------------------------------------------------------------------
 	// 3. Generate the SHA1 hash of the challenge
 	printf("3. Generating SHA1 hash...");
-
-	BIO *mem = BIO_new(BIO_s_mem());
-
-	//char sha1_buff[BUFFER_SIZE];
+	
+	unsigned char sha1_buff[BUFFER_LENGTH];
 	//memset(buff,0,sizeof(sha1_buff));
+	SHA1(challenge, BUFFER_LENGTH, sha1_buff);
+
+	//
+	
 	//BIO_write(mem, 
 	//BIO_new(BIO_f_md());
 	//BIO_set_md;
 	//BIO_push;
-	//BIO_gets;
+	//BIO_reach;
 
-    int mdlen=0;
-	string hash_string = "";
+	//	int mdlen=0;
+	//	string hash_string = "";
 
 	printf("SUCCESS.\n");
-	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", hash_string.c_str(), mdlen);
+	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
+	       sha1_buff, sizeof(sha1_buff));
 
     //-------------------------------------------------------------------------
 	// 4. Sign the key using the RSA private key specified in the
@@ -138,8 +147,9 @@ int main(int argc, char** argv)
 
     printf("DONE.\n");
     printf("    (Signed key length: %d bytes)\n", siglen);
-    printf("    (Signature: \"%s\" (%d bytes))\n", buff2hex((const unsigned char*)signature,
-							    siglen).c_str(), siglen);
+    printf("    (Signature: \"%s\" (%d bytes))\n",
+	   buff2hex((const unsigned char*)signature,
+		    siglen).c_str(), siglen);
 
     //-------------------------------------------------------------------------
 	// 5. Send the signature to the client for authentication
@@ -148,7 +158,7 @@ int main(int argc, char** argv)
 	//BIO_flush
 	//SSL_write
 
-    printf("DONE.\n");
+	printf("DONE.\n");
     
     //-------------------------------------------------------------------------
 	// 6. Receive a filename request from the client

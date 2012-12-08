@@ -20,7 +20,7 @@ using namespace std;
 
 #include "utils.h"
 
-
+#define BUFFER_LENGTH 16
 
 //----------------------------------------------------------------------------
 // Function: main()
@@ -96,24 +96,29 @@ int main(int argc, char** argv)
 	// 2. Send the server a random number
 	printf("2.  Sending challenge to the server...");
     
-	unsigned char buf[16];
+	unsigned char randChallenge[BUFFER_LENGTH];
 	//fix
-	if(!RAND_bytes(buf, sizeof(buf)-2))
+	if(!RAND_bytes(randChallenge, BUFFER_LENGTH-2))
 	{
 	  cerr << "Unable to generate random number for step 2." << endl;
 	  exit(1);
 	}
 	/* verify that buf is being transmitted correctly
 	for(int i = 0; i < 15; ++i)
-	  {
-	    buf[i] = 'a';
-	   } */
+	{
+	  randChallenge[i] = 'a';
+	} */
 
-	buf[sizeof(buf)-1] = NULL;
-	SSL_write(ssl, buf, sizeof(buf));
+	randChallenge[BUFFER_LENGTH-1] = NULL;
+
+
+	//ENCRYPT HERE WITH PRIVATE KEY
+
+
+	SSL_write(ssl, randChallenge, BUFFER_LENGTH);
     
 	printf("SUCCESS.\n");
-	printf("    (Challenge sent: \"%s\")\n",buf );
+	printf("    (Challenge sent: \"%s\")\n",randChallenge);
 
     //-------------------------------------------------------------------------
 	// 3a. Receive the signed key from the server
@@ -126,7 +131,14 @@ int main(int argc, char** argv)
 	printf("RECEIVED.\n");
 	printf("    (Signature: \"%s\" (%d bytes))\n",
 	       buff2hex((const unsigned char*)buff,len).c_str(), len);
-
+	       
+	       
+	 //hash the unencrypted challenge using SHA1
+	unsigned char sha1_buff[BUFFER_LENGTH];
+	//memset(buff,0,sizeof(sha1_buff));
+	SHA1(randChallenge, BUFFER_LENGTH, sha1_buff);
+	//printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
+	  //     sha1_buff, sizeof(sha1_buff));
     //-------------------------------------------------------------------------
 	// 3b. Authenticate the signed key
 	printf("3b. Authenticating key...");
@@ -138,8 +150,8 @@ int main(int argc, char** argv)
 	//RSA_public_decrypt
 	//BIO_free
 	
-	string generated_key="";
-	string decrypted_key="";
+	string generated_key = "";
+    string decrypted_key = "";
     
 	printf("AUTHENTICATED\n");
 	printf("    (Generated key: %s)\n", generated_key.c_str());
