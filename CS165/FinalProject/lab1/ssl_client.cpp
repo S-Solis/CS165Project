@@ -22,7 +22,7 @@ using namespace std;
 #include "utils.h"
 
 #define BUFFER_LENGTH 16
-
+#define SHA1_LENGTH 21 //extra 1 for null termination
 //----------------------------------------------------------------------------
 // Function: main()
 //----------------------------------------------------------------------------
@@ -122,7 +122,7 @@ int main(int argc, char** argv)
 	RSA* pubkey = PEM_read_bio_RSA_PUBKEY(pubin, NULL,NULL, NULL);
 	int pubkey_size = RSA_size(pubkey);
 	
-	//(?)
+	
 	unsigned char echallenge[pubkey_size];
 	cout << "Encrypting... " << endl;
 	
@@ -132,9 +132,9 @@ int main(int argc, char** argv)
 	cout <<  endl << "Writing... " << endl;
 	
 	
-	SSL_write(ssl, echallenge, BUFFER_LENGTH);
+	SSL_write(ssl, echallenge, pubkey_size);
     string echallenge_str = 
-		buff2hex((const unsigned char*)echallenge, BUFFER_LENGTH);
+		buff2hex((const unsigned char*)echallenge, pubkey_size);
 	string challenge_str = 
 		buff2hex((const unsigned char*)challenge, BUFFER_LENGTH);
 	printf("SUCCESS.\n");
@@ -157,11 +157,11 @@ int main(int argc, char** argv)
 	       
 	       
 	 //hash the unencrypted challenge using SHA1
-	unsigned char sha1_buff[BUFFER_LENGTH];
-	memset(sha1_buff,0,sizeof(sha1_buff));
+	unsigned char sha1_buff[SHA1_LENGTH];
+	memset(sha1_buff,0,SHA1_LENGTH);
 	SHA1(challenge, BUFFER_LENGTH, sha1_buff);
 	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
-	       buff2hex(sha1_buff,BUFFER_LENGTH).c_str(), BUFFER_LENGTH);
+	       buff2hex(sha1_buff,SHA1_LENGTH).c_str(), SHA1_LENGTH);
     //-------------------------------------------------------------------------
 	// 3b. Authenticate the signed key
 	printf("3b. Authenticating key...");

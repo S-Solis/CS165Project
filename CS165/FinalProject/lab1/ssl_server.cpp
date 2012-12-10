@@ -18,6 +18,7 @@ using namespace std;
 #include "utils.h"
 
 #define BUFFER_LENGTH 16
+#define SHA1_LENGTH 21 //extra 1 for null termination
 
 //-----------------------------------------------------------------------------
 // Function: main()
@@ -102,35 +103,39 @@ int main(int argc, char** argv)
 	printf("2. Waiting for client to connect and send challenge...");
     
 	//SSL_read
-	unsigned char challenge[BUFFER_LENGTH];
-	unsigned char dchallenge[BUFFER_LENGTH];
+	//set up bio
+	BIO* privin = BIO_new_file("rsaprivatekey.pem", "r");
+	RSA* privkey = PEM_read_bio_RSAPrivateKey(privin, NULL, NULL, NULL);
+	int privkey_size = RSA_size(privkey);
+	
+	//get encrypted challenge
+	unsigned char challenge[privkey_size];
 	memset(challenge,0,sizeof(challenge));
 	SSL_read(ssl, challenge, sizeof(challenge));
     
 	
-	//DECRYPT HERE
-
-
 	string challenge_str = buff2hex((const unsigned char*)challenge,
 		BUFFER_LENGTH);
-	printf("DONE.\n");
-	cout << "    (Challenge: \"" <<  challenge_str << "\"\n";
 	
-	BIO* privin = BIO_new_file("rsaprivatekey.pem", "r");
-	RSA* privkey = PEM_read_bio_RSAPrivateKey(privin, NULL, NULL, NULL);
-	int dec_size = RSA_private_decrypt(BUFFER_LENGTH, challenge,
+	//decrypt challenge
+	unsigned char dchallenge[privkey_size];
+	
+	int dec_size = RSA_private_decrypt(privkey_size, challenge,
 			dchallenge, privkey, RSA_PKCS1_PADDING);
 			
 	string dchallenge_str = buff2hex((const unsigned char*)dchallenge, 
 		BUFFER_LENGTH);
+		
+	printf("DONE.\n");
+	cout << "    (Challenge: \"" <<  challenge_str << "\"\n";
 	cout << "    (Decrypted Challenge: \"" << dchallenge_str << "\"\n";
 	
     //-------------------------------------------------------------------------
 	// 3. Generate the SHA1 hash of the challenge
 	printf("3. Generating SHA1 hash...");
 	
-	unsigned char sha1_buff[BUFFER_LENGTH];
-	memset(sha1_buff,0,BUFFER_LENGTH);
+	unsigned char sha1_buff[SHA1_LENGTH];
+	memset(sha1_buff,0,SHA1_LENGTH);
 	SHA1(dchallenge, BUFFER_LENGTH, sha1_buff);
 
 	//
