@@ -103,21 +103,35 @@ int main(int argc, char** argv)
     
 	//SSL_read
 	unsigned char challenge[BUFFER_LENGTH];
+	unsigned char dchallenge[BUFFER_LENGTH];
+	memset(challenge,0,sizeof(challenge));
 	SSL_read(ssl, challenge, sizeof(challenge));
     
-
+	
 	//DECRYPT HERE
 
-	printf("DONE.\n");
-	printf("    (Challenge: \"%s\")\n", challenge);
 
+	string challenge_str = buff2hex((const unsigned char*)challenge,
+		BUFFER_LENGTH);
+	printf("DONE.\n");
+	cout << "    (Challenge: \"" <<  challenge_str << "\"\n";
+	
+	BIO* privin = BIO_new_file("rsaprivatekey.pem", "r");
+	RSA* privkey = PEM_read_bio_RSAPrivateKey(privin, NULL, NULL, NULL);
+	int dec_size = RSA_private_decrypt(BUFFER_LENGTH, challenge,
+			dchallenge, privkey, RSA_PKCS1_PADDING);
+			
+	string dchallenge_str = buff2hex((const unsigned char*)dchallenge, 
+		BUFFER_LENGTH);
+	cout << "    (Decrypted Challenge: \"" << dchallenge_str << "\"\n";
+	
     //-------------------------------------------------------------------------
 	// 3. Generate the SHA1 hash of the challenge
 	printf("3. Generating SHA1 hash...");
 	
 	unsigned char sha1_buff[BUFFER_LENGTH];
-	//memset(buff,0,sizeof(sha1_buff));
-	SHA1(challenge, BUFFER_LENGTH, sha1_buff);
+	memset(sha1_buff,0,BUFFER_LENGTH);
+	SHA1(dchallenge, BUFFER_LENGTH, sha1_buff);
 
 	//
 	
@@ -132,7 +146,7 @@ int main(int argc, char** argv)
 
 	printf("SUCCESS.\n");
 	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
-	       sha1_buff, sizeof(sha1_buff));
+	       buff2hex(sha1_buff,BUFFER_LENGTH).c_str(), BUFFER_LENGTH);
 
     //-------------------------------------------------------------------------
 	// 4. Sign the key using the RSA private key specified in the
@@ -141,7 +155,7 @@ int main(int argc, char** argv)
 
     //PEM_read_bio_RSAPrivateKey
     //RSA_private_encrypt
-
+    
     int siglen=0;
     char* signature="FIXME";
 
@@ -165,27 +179,28 @@ int main(int argc, char** argv)
 	printf("6. Receiving file request from client...");
 
     //SSL_read
-    char file[BUFFER_SIZE];
-    memset(file,0,sizeof(file));
-	/***
-	ADDED CODE
-	****/
-    //int bufflen = 0;
-    //		bufflen = SSL_read(ssl, buff, BUFFER_SIZE);
+    char filename[BUFFER_SIZE];
+    memset(filename,0,sizeof(filename));
+    
+    
+    int filenamelen = 0;
+	filenamelen = SSL_read(ssl, filename, BUFFER_SIZE);
 
     printf("RECEIVED.\n");
-    printf("    (File requested: \"%s\"\n", file);
+    printf("    (File requested: \"%s\")\n", filename);
 
     //-------------------------------------------------------------------------
 	// 7. Send the requested file back to the client (if it exists)
 	printf("7. Attempting to send requested file to client...");
 
 	PAUSE(2);
-	//BIO_flush
+	BIO_flush(server);
 	//BIO_new_file
 	//BIO_puts(server, "fnf");
     //BIO_read(bfile, buffer, BUFFER_SIZE)) > 0)
 	//SSL_write(ssl, buffer, bytesRead);
+	
+	
 
     int bytesSent=0;
     
@@ -196,8 +211,9 @@ int main(int argc, char** argv)
 	// 8. Close the connection
 	printf("8. Closing connection...");
 
-	//SSL_shutdown
-    //BIO_reset
+	SSL_shutdown(ssl);
+    BIO_reset(server);
+	BIO_free(server);
     printf("DONE.\n");
 
     printf("\n\nALL TASKS COMPLETED SUCCESSFULLY.\n");

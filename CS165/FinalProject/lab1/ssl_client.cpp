@@ -8,6 +8,7 @@
 #include <time.h>               // to seed random number generator
 #include <sstream>          // stringstreams
 #include <iostream>
+#include <fstream>
 using namespace std;
 
 #include <openssl/ssl.h>	// Secure Socket Layer library
@@ -96,9 +97,10 @@ int main(int argc, char** argv)
 	// 2. Send the server a random number
 	printf("2.  Sending challenge to the server...");
     
-	unsigned char randChallenge[BUFFER_LENGTH];
+	//2a. Generate random number
+	unsigned char challenge[BUFFER_LENGTH];
 	//fix
-	if(!RAND_bytes(randChallenge, BUFFER_LENGTH-2))
+	if(!RAND_bytes(challenge, BUFFER_LENGTH-1))
 	{
 	  cerr << "Unable to generate random number for step 2." << endl;
 	  exit(1);
@@ -106,23 +108,44 @@ int main(int argc, char** argv)
 	/* verify that buf is being transmitted correctly
 	for(int i = 0; i < 15; ++i)
 	{
-	  randChallenge[i] = 'a';
+	  challenge[i] = 'a';
 	} */
-
-	randChallenge[BUFFER_LENGTH-1] = NULL;
-
-
-	//ENCRYPT HERE WITH PRIVATE KEY
-
-
-	SSL_write(ssl, randChallenge, BUFFER_LENGTH);
-    
+	
+	
+	//2b. Encrypt challenege with server's public key
+	
+	//get public key
+	
+	cout << endl << "Reading in public key... " << endl;
+	
+	BIO* pubin = BIO_new_file("rsapublickey.pem","r");
+	RSA* pubkey = PEM_read_bio_RSA_PUBKEY(pubin, NULL,NULL, NULL);
+	int pubkey_size = RSA_size(pubkey);
+	
+	//(?)
+	unsigned char echallenge[pubkey_size];
+	cout << "Encrypting... " << endl;
+	
+	int enc_size = RSA_public_encrypt(BUFFER_LENGTH, challenge, echallenge, 
+	                  pubkey, RSA_PKCS1_PADDING);
+	cout << "Size of encrypted thing: " << enc_size << endl;
+	cout <<  endl << "Writing... " << endl;
+	
+	
+	SSL_write(ssl, echallenge, BUFFER_LENGTH);
+    string echallenge_str = 
+		buff2hex((const unsigned char*)echallenge, BUFFER_LENGTH);
+	string challenge_str = 
+		buff2hex((const unsigned char*)challenge, BUFFER_LENGTH);
 	printf("SUCCESS.\n");
-	printf("    (Challenge sent: \"%s\")\n",randChallenge);
-
+	
+	cout << "    (Challenge: \"" <<  challenge_str << "\"\n";
+	cout << "    (Encrypted Challenge: \"" << echallenge_str << "\"\n";
+	
     //-------------------------------------------------------------------------
 	// 3a. Receive the signed key from the server
 	printf("3a. Receiving signed key from server...");
+
 
 	char* buff="FIXME";
 	int len=5;
@@ -135,10 +158,10 @@ int main(int argc, char** argv)
 	       
 	 //hash the unencrypted challenge using SHA1
 	unsigned char sha1_buff[BUFFER_LENGTH];
-	//memset(buff,0,sizeof(sha1_buff));
-	SHA1(randChallenge, BUFFER_LENGTH, sha1_buff);
-	//printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
-	  //     sha1_buff, sizeof(sha1_buff));
+	memset(sha1_buff,0,sizeof(sha1_buff));
+	SHA1(challenge, BUFFER_LENGTH, sha1_buff);
+	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
+	       buff2hex(sha1_buff,BUFFER_LENGTH).c_str(), BUFFER_LENGTH);
     //-------------------------------------------------------------------------
 	// 3b. Authenticate the signed key
 	printf("3b. Authenticating key...");
@@ -160,7 +183,8 @@ int main(int argc, char** argv)
     //-------------------------------------------------------------------------
 	// 4. Send the server a file request
 	printf("4.  Sending file request to server...");
-
+	
+	SSL_write(ssl, filename + NULL, sizeof(filename)+1);
 	PAUSE(2);
 	//BIO_flush
     //BIO_puts
@@ -184,8 +208,9 @@ int main(int argc, char** argv)
 	// 6. Close the connection
 	printf("6.  Closing the connection...");
 
-	//SSL_shutdown
-	
+	SSL_shutdown(ssl);
+	BIO_reset(client);
+	BIO_free(client);
 	printf("DONE.\n");
 	
 	printf("\n\nALL TASKS COMPLETED SUCCESSFULLY.\n");
