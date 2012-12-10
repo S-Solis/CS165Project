@@ -21,8 +21,9 @@ using namespace std;
 
 #include "utils.h"
 
-#define BUFFER_LENGTH 16
+#define CHALLENGE_LENGTH 16
 #define SHA1_LENGTH 21 //extra 1 for null termination
+#define MAX_READ 128
 //----------------------------------------------------------------------------
 // Function: main()
 //----------------------------------------------------------------------------
@@ -98,9 +99,9 @@ int main(int argc, char** argv)
 	printf("2.  Sending challenge to the server...");
     
 	//2a. Generate random number
-	unsigned char challenge[BUFFER_LENGTH];
+	unsigned char challenge[CHALLENGE_LENGTH];
 	//fix
-	if(!RAND_bytes(challenge, BUFFER_LENGTH-1))
+	if(!RAND_bytes(challenge, CHALLENGE_LENGTH-1))
 	{
 	  cerr << "Unable to generate random number for step 2." << endl;
 	  exit(1);
@@ -126,7 +127,7 @@ int main(int argc, char** argv)
 	unsigned char echallenge[pubkey_size];
 	cout << "Encrypting... " << endl;
 	
-	int enc_size = RSA_public_encrypt(BUFFER_LENGTH, challenge, echallenge, 
+	int enc_size = RSA_public_encrypt(CHALLENGE_LENGTH, challenge, echallenge, 
 	                  pubkey, RSA_PKCS1_PADDING);
 	cout << "Size of encrypted thing: " << enc_size << endl;
 	cout <<  endl << "Writing... " << endl;
@@ -136,20 +137,20 @@ int main(int argc, char** argv)
     string echallenge_str = 
 		buff2hex((const unsigned char*)echallenge, pubkey_size);
 	string challenge_str = 
-		buff2hex((const unsigned char*)challenge, BUFFER_LENGTH);
+		buff2hex((const unsigned char*)challenge, CHALLENGE_LENGTH);
 	printf("SUCCESS.\n");
 	
-	cout << "    (Challenge: \"" <<  challenge_str << "\"\n";
-	cout << "    (Encrypted Challenge: \"" << echallenge_str << "\"\n";
+	cout << "    (Challenge: \"" <<  challenge_str << "\")\n";
+	cout << "    (Encrypted Challenge: \"" << echallenge_str << "\")\n";
 	
     //-------------------------------------------------------------------------
 	// 3a. Receive the signed key from the server
 	printf("3a. Receiving signed key from server...");
 
 
-	char* buff="FIXME";
-	int len=5;
-	//SSL_read;
+	unsigned char buff[MAX_READ];
+	int len = SSL_read(ssl,buff,MAX_READ);
+	
 
 	printf("RECEIVED.\n");
 	printf("    (Signature: \"%s\" (%d bytes))\n",
@@ -159,26 +160,48 @@ int main(int argc, char** argv)
 	 //hash the unencrypted challenge using SHA1
 	unsigned char sha1_buff[SHA1_LENGTH];
 	memset(sha1_buff,0,SHA1_LENGTH);
-	SHA1(challenge, BUFFER_LENGTH, sha1_buff);
+	SHA1(challenge, CHALLENGE_LENGTH, sha1_buff);
 	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
 	       buff2hex(sha1_buff,SHA1_LENGTH).c_str(), SHA1_LENGTH);
+	/*       
+	//hash the encrypted challenge just to check
+	unsigned char sha1_buff2[SHA1_LENGTH];
+	memset(sha1_buff2,0,SHA1_LENGTH);
+	SHA1(echallenge, CHALLENGE_LENGTH, sha1_buff2);
+	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
+	       buff2hex(sha1_buff2,SHA1_LENGTH).c_str(), SHA1_LENGTH);*/
     //-------------------------------------------------------------------------
 	// 3b. Authenticate the signed key
 	printf("3b. Authenticating key...");
-
-	//BIO_new(BIO_s_mem())
-	//BIO_write
-	//BIO_new_file
-	//PEM_read_bio_RSA_PUBKEY
-	//RSA_public_decrypt
-	//BIO_free
+	BIO* keyin = BIO_new_file("rsapublickey.pem", "r");
+	RSA* key = PEM_read_bio_RSA_PUBKEY(keyin, NULL, NULL, NULL);
+	int key_size = RSA_size(key);
 	
-	string generated_key = "";
-    string decrypted_key = "";
+	unsigned char dec_hash[MAX_READ];
+	
+	int dec_hash_size = RSA_public_decrypt(len, buff, dec_hash, key,
+		RSA_PKCS1_PADDING);
+		
+	if( dec_hash_size != SHA1_LENGTH)
+	{
+		cout << endl << "Authentication failed." << endl;
+		exit(EXIT_FAILURE);
+	}
+	
+	for(unsigned int i = 0; i < SHA1_LENGTH; ++i)
+	{
+		if(dec_hash[i] != sha1_buff[i])
+		{
+			cout << endl << "Authentication failed." << endl;
+			exit(EXIT_FAILURE);
+		}	
+	}
     
 	printf("AUTHENTICATED\n");
-	printf("    (Generated key: %s)\n", generated_key.c_str());
-	printf("    (Decrypted key: %s)\n", decrypted_key.c_str());
+	printf("    (Generated hash: %s)\n",
+		   buff2hex(sha1_buff,SHA1_LENGTH).c_str(), SHA1_LENGTH);
+	printf("    (Decrypted hash: %s)\n",
+		   buff2hex(dec_hash,SHA1_LENGTH).c_str(), SHA1_LENGTH);
 
     //-------------------------------------------------------------------------
 	// 4. Send the server a file request

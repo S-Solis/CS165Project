@@ -17,8 +17,9 @@ using namespace std;
 
 #include "utils.h"
 
-#define BUFFER_LENGTH 16
+#define READ_LENGTH 256
 #define SHA1_LENGTH 21 //extra 1 for null termination
+#define MAX_CHALLENGE 1025
 
 //-----------------------------------------------------------------------------
 // Function: main()
@@ -102,33 +103,51 @@ int main(int argc, char** argv)
 	// 2. Receive a random number (the challenge) from the client
 	printf("2. Waiting for client to connect and send challenge...");
     
-	//SSL_read
-	//set up bio
+	//set up BIO
 	BIO* privin = BIO_new_file("rsaprivatekey.pem", "r");
 	RSA* privkey = PEM_read_bio_RSAPrivateKey(privin, NULL, NULL, NULL);
 	int privkey_size = RSA_size(privkey);
 	
 	//get encrypted challenge
-	unsigned char challenge[privkey_size];
-	memset(challenge,0,sizeof(challenge));
-	SSL_read(ssl, challenge, sizeof(challenge));
+	unsigned char challenge[MAX_CHALLENGE];
+	memset(challenge, 0, MAX_CHALLENGE);
+	int challenge_leng = SSL_read(ssl, challenge, MAX_CHALLENGE);
+	if(SSL_get_shutdown(ssl))
+	{
+		cout << endl << "Connection shut down while reading challenge."
+			 << endl;
+		exit(EXIT_FAILURE);
+	}
+	if(challenge_leng <= 0)
+	{
+		cout << endl << "No challenge could be read. " << endl;
+		exit(EXIT_FAILURE);
+	}
     
 	
 	string challenge_str = buff2hex((const unsigned char*)challenge,
-		BUFFER_LENGTH);
+		challenge_leng);
+	
+	
 	
 	//decrypt challenge
-	unsigned char dchallenge[privkey_size];
+	unsigned char dchallenge[MAX_CHALLENGE];
+	memset(dchallenge, 0, MAX_CHALLENGE);
 	
-	int dec_size = RSA_private_decrypt(privkey_size, challenge,
+	int dec_size = RSA_private_decrypt(challenge_leng, challenge,
 			dchallenge, privkey, RSA_PKCS1_PADDING);
 			
+	if(dec_size < 0)
+	{
+		cout << endl << "Error decrypting the challenge." << endl;
+		exit(EXIT_FAILURE);
+	}
 	string dchallenge_str = buff2hex((const unsigned char*)dchallenge, 
-		BUFFER_LENGTH);
+		dec_size);
 		
 	printf("DONE.\n");
-	cout << "    (Challenge: \"" <<  challenge_str << "\"\n";
-	cout << "    (Decrypted Challenge: \"" << dchallenge_str << "\"\n";
+	cout << "    (Challenge: \"" <<  challenge_str << "\")\n";
+	cout << "    (Decrypted Challenge: \"" << dchallenge_str << "\")\n";
 	
     //-------------------------------------------------------------------------
 	// 3. Generate the SHA1 hash of the challenge
@@ -136,7 +155,7 @@ int main(int argc, char** argv)
 	
 	unsigned char sha1_buff[SHA1_LENGTH];
 	memset(sha1_buff,0,SHA1_LENGTH);
-	SHA1(dchallenge, BUFFER_LENGTH, sha1_buff);
+	SHA1(dchallenge, dec_size, sha1_buff);
 
 	//
 	
@@ -151,19 +170,30 @@ int main(int argc, char** argv)
 
 	printf("SUCCESS.\n");
 	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
-	       buff2hex(sha1_buff,BUFFER_LENGTH).c_str(), BUFFER_LENGTH);
+	       buff2hex(sha1_buff,SHA1_LENGTH).c_str(), SHA1_LENGTH);
 
     //-------------------------------------------------------------------------
 	// 4. Sign the key using the RSA private key specified in the
 	//     file "rsaprivatekey.pem"
 	printf("4. Signing the key...");
-
-    //PEM_read_bio_RSAPrivateKey
-    //RSA_private_encrypt
-    
-    int siglen=0;
-    char* signature="FIXME";
-
+	//read in private key
+	BIO* keyin = BIO_new_file("rsaprivatekey.pem", "r");
+	RSA* key = PEM_read_bio_RSAPrivateKey(keyin, NULL, NULL, NULL);
+	int key_size = RSA_size(key);
+	
+	//encrypt hased string with private key
+	unsigned char signature[MAX_CHALLENGE];
+	memset(signature, 0, MAX_CHALLENGE);
+	
+	int siglen = RSA_private_encrypt(SHA1_LENGTH, sha1_buff,
+			signature, key, RSA_PKCS1_PADDING);
+	
+	if(siglen < 0)
+	{
+		cout << endl << "Error encrypting the hash." << endl;
+		exit(EXIT_FAILURE);
+	}
+	
     printf("DONE.\n");
     printf("    (Signed key length: %d bytes)\n", siglen);
     printf("    (Signature: \"%s\" (%d bytes))\n",
@@ -175,7 +205,7 @@ int main(int argc, char** argv)
 	printf("5. Sending signature to client for authentication...");
 
 	//BIO_flush
-	//SSL_write
+	SSL_write(ssl, signature, siglen);
 
 	printf("DONE.\n");
     
@@ -184,15 +214,26 @@ int main(int argc, char** argv)
 	printf("6. Receiving file request from client...");
 
     //SSL_read
-    char filename[BUFFER_SIZE];
-    memset(filename,0,sizeof(filename));
+    char filename_arr[MAX_CHALLENGE];
+    memset(filename_arr,0,sizeof(filename_arr));
     
     
     int filenamelen = 0;
-	filenamelen = SSL_read(ssl, filename, BUFFER_SIZE);
+	filenamelen = SSL_read(ssl, filename_arr, MAX_CHALLENGE);
+	if(filenamelen <= 0)
+	{
+		cout << endl << "File name was not properly read." << endl;
+		exit(EXIT_FAILURE);
+	}
+	
+	string filename;
+	for(unsigned int i = 0; i < filenamelen; ++i)
+	{
+		filename += filename_arr[i];
+	}
 
     printf("RECEIVED.\n");
-    printf("    (File requested: \"%s\")\n", filename);
+    printf("    (File requested: \"%s\")\n", filename.c_str());
 
     //-------------------------------------------------------------------------
 	// 7. Send the requested file back to the client (if it exists)
