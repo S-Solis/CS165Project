@@ -1,3 +1,6 @@
+Note: The submitted version and the version on GitHub are not the same
+  due to a problem with GitHub.
+  
 To run, perform the following commands in one terminal:
 
 make
