@@ -24,6 +24,7 @@ using namespace std;
 #define CHALLENGE_LENGTH 16
 #define SHA1_LENGTH 21 //extra 1 for null termination
 #define MAX_READ 128
+#define F_READ 256
 //----------------------------------------------------------------------------
 // Function: main()
 //----------------------------------------------------------------------------
@@ -140,6 +141,8 @@ int main(int argc, char** argv)
 		buff2hex((const unsigned char*)challenge, CHALLENGE_LENGTH);
 	printf("SUCCESS.\n");
 	
+	BIO_free(pubin);
+	
 	cout << "    (Challenge: \"" <<  challenge_str << "\")\n";
 	cout << "    (Encrypted Challenge: \"" << echallenge_str << "\")\n";
 	
@@ -196,6 +199,8 @@ int main(int argc, char** argv)
 			exit(EXIT_FAILURE);
 		}	
 	}
+	
+	BIO_free(keyin);
     
 	printf("AUTHENTICATED\n");
 	printf("    (Generated hash: %s)\n",
@@ -209,9 +214,6 @@ int main(int argc, char** argv)
 	
 	SSL_write(ssl, filename + NULL, sizeof(filename)+1);
 	PAUSE(2);
-	//BIO_flush
-    //BIO_puts
-	//SSL_write
 
     printf("SENT.\n");
 	printf("    (File requested: \"%s\")\n", filename);
@@ -220,12 +222,23 @@ int main(int argc, char** argv)
 	// 5. Receives and displays the contents of the file requested
 	printf("5.  Receiving response from server...");
 
-    //BIO_new_file
-    //SSL_read
-	//BIO_write
-	//BIO_free
-
-	printf("FILE RECEIVED.\n");
+    BIO* fout = BIO_new_file("transmitted_file.txt", "w+");
+    
+    cout << endl;
+    int actualRead=0;
+    while(1)
+    {
+		unsigned char read[F_READ];
+		memset(read,0,F_READ);
+		actualRead = SSL_read(ssl,read,F_READ-1);
+		if(actualRead <= 0)
+			break;
+		BIO_write(fout, read, F_READ-1);
+		cout << read;
+	}
+    
+	BIO_free(fout);
+	printf("FILE RECEIVED AND DISPLAYED.\n");
 
     //-------------------------------------------------------------------------
 	// 6. Close the connection
@@ -233,15 +246,14 @@ int main(int argc, char** argv)
 
 	SSL_shutdown(ssl);
 	BIO_reset(client);
-	BIO_free(client);
 	printf("DONE.\n");
 	
 	printf("\n\nALL TASKS COMPLETED SUCCESSFULLY.\n");
 
     //-------------------------------------------------------------------------
 	// Freedom!
-	SSL_CTX_free(ctx);
-	SSL_free(ssl);
+	
+	BIO_free_all(client);
 	return EXIT_SUCCESS;
 	
 }

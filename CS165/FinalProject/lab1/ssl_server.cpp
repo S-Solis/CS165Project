@@ -20,6 +20,7 @@ using namespace std;
 #define READ_LENGTH 256
 #define SHA1_LENGTH 21 //extra 1 for null termination
 #define MAX_CHALLENGE 1025
+#define F_READ 1024
 
 //-----------------------------------------------------------------------------
 // Function: main()
@@ -128,7 +129,7 @@ int main(int argc, char** argv)
 	string challenge_str = buff2hex((const unsigned char*)challenge,
 		challenge_leng);
 	
-	
+	BIO_free(privin);
 	
 	//decrypt challenge
 	unsigned char dchallenge[MAX_CHALLENGE];
@@ -157,16 +158,6 @@ int main(int argc, char** argv)
 	memset(sha1_buff,0,SHA1_LENGTH);
 	SHA1(dchallenge, dec_size, sha1_buff);
 
-	//
-	
-	//BIO_write(mem, 
-	//BIO_new(BIO_f_md());
-	//BIO_set_md;
-	//BIO_push;
-	//BIO_reach;
-
-	//	int mdlen=0;
-	//	string hash_string = "";
 
 	printf("SUCCESS.\n");
 	printf("    (SHA1 hash: \"%s\" (%d bytes))\n", 
@@ -176,6 +167,7 @@ int main(int argc, char** argv)
 	// 4. Sign the key using the RSA private key specified in the
 	//     file "rsaprivatekey.pem"
 	printf("4. Signing the key...");
+	
 	//read in private key
 	BIO* keyin = BIO_new_file("rsaprivatekey.pem", "r");
 	RSA* key = PEM_read_bio_RSAPrivateKey(keyin, NULL, NULL, NULL);
@@ -194,6 +186,7 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 	
+	BIO_free(keyin);
     printf("DONE.\n");
     printf("    (Signed key length: %d bytes)\n", siglen);
     printf("    (Signature: \"%s\" (%d bytes))\n",
@@ -214,12 +207,12 @@ int main(int argc, char** argv)
 	printf("6. Receiving file request from client...");
 
     //SSL_read
-    char filename_arr[MAX_CHALLENGE];
-    memset(filename_arr,0,sizeof(filename_arr));
+    char filename_arr[READ_LENGTH]; //max filename typically 255
+    memset(filename_arr,0,READ_LENGTH);
     
     
     int filenamelen = 0;
-	filenamelen = SSL_read(ssl, filename_arr, MAX_CHALLENGE);
+	filenamelen = SSL_read(ssl, filename_arr, READ_LENGTH);
 	if(filenamelen <= 0)
 	{
 		cout << endl << "File name was not properly read." << endl;
@@ -241,15 +234,37 @@ int main(int argc, char** argv)
 
 	PAUSE(2);
 	BIO_flush(server);
+	BIO* fin = BIO_new_file(filename.c_str(), "r");
+	
+	if(!fin)
+	{
+		cout << endl << "Error reading the file: " << filename << endl;
+		exit(EXIT_FAILURE);
+	}
+	
+
+    int bytesSent=0;
+	int actualRead = 1;
+	while(1)
+	{
+		unsigned char read[F_READ];
+		memset(read,0,F_READ);
+		actualRead = BIO_read(fin,read,F_READ);
+		if(actualRead <= 0)
+			break;
+		bytesSent += actualRead;
+		SSL_write(ssl, read, F_READ);
+	}
+		
+		
+	
 	//BIO_new_file
 	//BIO_puts(server, "fnf");
     //BIO_read(bfile, buffer, BUFFER_SIZE)) > 0)
 	//SSL_write(ssl, buffer, bytesRead);
 	
 	
-
-    int bytesSent=0;
-    
+    BIO_free(fin);
     printf("SENT.\n");
     printf("    (Bytes sent: %d)\n", bytesSent);
 
@@ -259,7 +274,6 @@ int main(int argc, char** argv)
 
 	SSL_shutdown(ssl);
     BIO_reset(server);
-	BIO_free(server);
     printf("DONE.\n");
 
     printf("\n\nALL TASKS COMPLETED SUCCESSFULLY.\n");
